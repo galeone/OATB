@@ -94,3 +94,14 @@ def infer(input_x, keep_prob):
     b_fc2 = bias_variable([10])
     logits = tf.matmul(h_fc1_drop, W_fc2) + b_fc2
     return logits
+
+
+def loss(logits, labels):
+    """ Return the loss function for the model returned by infer.
+    Args:
+        logits: Logits from infer()
+        labels: one-hot encoded labels
+    """
+
+    return tf.reduce_mean(-tf.reduce_sum(
+        labels * tf.log(tf.nn.softmax(logits)), reduction_indices=[1]))

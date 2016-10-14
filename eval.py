@@ -10,7 +10,7 @@
 import sys
 import tensorflow as tf
 import tensorflow.examples.tutorials.mnist as mnist_data
-import mnist
+from mnist import model
 
 
 def main():
@@ -79,12 +79,10 @@ def main():
 
         for obj in optimizers:
             # define the model
-            obj["logits"] = mnist.infer(inputs_, keep_prob_)
+            obj["logits"] = model.infer(inputs_, keep_prob_)
 
             # define the loss
-            obj["loss"] = tf.reduce_mean(-tf.reduce_sum(
-                labels_ * tf.log(tf.nn.softmax(obj["logits"])),
-                reduction_indices=[1]))
+            obj["loss"] = model.loss(obj["logits"], labels_)
 
             # define the train step
             obj["train_step"] = obj["optimizer"].minimize(obj["loss"])
