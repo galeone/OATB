@@ -75,6 +75,13 @@ def main():
             "logits": None,
             "loss": None,
             "train_step": None,
+        }, {
+            "name": "FTRL",
+            "optimizer": tf.train.FtrlOptimizer(learning_rate),
+            "summary": tf.train.SummaryWriter('log/FTRL'),
+            "logits": None,
+            "loss": None,
+            "train_step": None,
         }]
 
         for obj in optimizers:
@@ -106,7 +113,7 @@ def main():
 
         init_op = tf.initialize_all_variables()
 
-    with tf.Session() as sess:
+    with tf.Session(config=tf.ConfigProto(allow_soft_placement=True)) as sess:
         sess.run(init_op)
 
         for i in range(20000):
