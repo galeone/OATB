@@ -52,6 +52,7 @@ def main(args):
                 "logits": None,
                 "loss": None,
                 "train_step": None,
+                "loss_summary": None,
             }, {
                 "name": "Momentum",
                 "optimizer": tf.train.MomentumOptimizer(
@@ -60,6 +61,7 @@ def main(args):
                 "logits": None,
                 "loss": None,
                 "train_step": None,
+                "loss_summary": None,
             }, {
                 "name": "AdaGrad",
                 "optimizer": tf.train.AdagradOptimizer(learning_rate),
@@ -67,6 +69,7 @@ def main(args):
                 "logits": None,
                 "loss": None,
                 "train_step": None,
+                "loss_summary": None,
             }, {
                 "name": "AdaDelta",
                 "optimizer": tf.train.AdadeltaOptimizer(),
@@ -74,6 +77,7 @@ def main(args):
                 "logits": None,
                 "loss": None,
                 "train_step": None,
+                "loss_summary": None,
             }, {
                 "name": "RMSProp",
                 "optimizer": tf.train.RMSPropOptimizer(learning_rate),
@@ -81,6 +85,7 @@ def main(args):
                 "logits": None,
                 "loss": None,
                 "train_step": None,
+                "loss_summary": None,
             }, {
                 "name": "ADAM",
                 "optimizer": tf.train.AdamOptimizer(learning_rate),
@@ -88,6 +93,7 @@ def main(args):
                 "logits": None,
                 "loss": None,
                 "train_step": None,
+                "loss_summary": None,
             }, {
                 "name": "FTRL",
                 "optimizer": tf.train.FtrlOptimizer(learning_rate),
@@ -95,6 +101,7 @@ def main(args):
                 "logits": None,
                 "loss": None,
                 "train_step": None,
+                "loss_summary": None,
             }]
 
             for obj in optimizers:
@@ -103,16 +110,13 @@ def main(args):
                 obj["logits"] = model.logits
 
                 # define the loss
-                strength = 0 #disable L2 regularization
-                obj["loss"] = model.loss(labels_) + strength * tf.add_n(
-                    [tf.nn.l2_loss(weight) for weight in model.variables()])
+                obj["loss"] = model.loss(labels_)
 
                 # define the train step
                 obj["train_step"] = obj["optimizer"].minimize(obj["loss"])
 
-                with tf.device('/cpu:0'):
-                    # log the loss value in the 'loss' summary
-                    loss_summary = tf.scalar_summary('loss', obj["loss"])
+                # log the loss value in the 'loss' summary
+                obj["loss_summary"] = tf.scalar_summary('loss', obj["loss"])
 
             # define metrics in functions of placeholders
             predictions_ = tf.placeholder(tf.float32, shape=[None, 10])
@@ -127,7 +131,6 @@ def main(args):
         accuracy_summary = tf.scalar_summary(accuracy_name_, accuracy)
 
         init_op = tf.initialize_all_variables()
-
         with tf.Session(config=tf.ConfigProto(
                 allow_soft_placement=True)) as sess:
             sess.run(init_op)
@@ -136,10 +139,8 @@ def main(args):
             batch = datasets.train.next_batch(BATCH_SIZE)
 
             for obj in optimizers:
-                # Add graph to SummaryWriters
-                obj["summary"].add_graph(sess.graph)
                 # Log intial loss value, before training
-                summary_line = sess.run(loss_summary,
+                summary_line = sess.run(obj["loss_summary"],
                                         feed_dict={
                                             inputs_: batch[0],
                                             labels_: batch[1],
@@ -151,8 +152,8 @@ def main(args):
             for i in range(1, 20001):
                 batch = datasets.train.next_batch(BATCH_SIZE)
                 for obj in optimizers:
-                    _, summary_line = sess.run(
-                        [obj["train_step"], loss_summary],
+                    _, summary_line, loss_value = sess.run(
+                        [obj["train_step"], obj["loss_summary"], obj["loss"]],
                         feed_dict={
                             inputs_: batch[0],
                             labels_: batch[1],
@@ -194,8 +195,9 @@ def main(args):
                         obj["summary"].add_summary(summary_line, global_step=i)
 
                         print(
-                            "step {}, training accuracy {} valdidation accuracy {}".
-                            format(i, train_accuracy, validation_accuracy))
+                            "{}: step {}, training accuracy {} valdidation accuracy {}. Loss: {}".
+                            format(obj["name"], i, train_accuracy,
+                                   validation_accuracy, loss_value))
 
                     obj["summary"].flush()
 
