@@ -13,95 +13,71 @@
 # limitations under the License.
 # ==============================================================================
 """Defines LeNet as showed into the Tensorflow MNIST tutorial"""
+import uuid
 import tensorflow as tf
-
-# define some handy functions in order to create variables easily
-
-
-def weight_variable(shape):
-    """Returns a new variable with the chosen shape, initialized with
-    random values from a normal distribution"""
-    initial = tf.truncated_normal(shape, stddev=0.1)
-    return tf.Variable(initial)
+from . import utils
 
 
-def bias_variable(shape):
-    """Returns a bias variabile initializeted to 0.1"""
-    initial = tf.constant(0.1, shape=shape)
-    return tf.Variable(initial)
+class Model:
+    def __init__(self, input_x, keep_prob):
+        # associate a UUID with the object
+        self._uuid = str(uuid.uuid1())
+        # prefix every variable in the model with the uuid
+        self.logits = self._infer(input_x, keep_prob)
 
+    def _infer(self, input_x, keep_prob):
+        """Returns the model"""
+        x_image = tf.reshape(input_x, [-1, 28, 28, 1])
 
-def conv2d(input_x, W):
-    """Convolve input_x with W"""
-    return tf.nn.conv2d(input_x, W, strides=[1, 1, 1, 1], padding='SAME')
+        with tf.variable_scope(self._uuid + "conv1"):
+            conv1 = tf.nn.relu(
+                utils.conv_layer(x_image, [5, 5, 1, 32], 1, 'SAME'))
 
+        with tf.variable_scope(self._uuid + "pool1"):
+            pool1 = tf.nn.max_pool(
+                conv1,
+                ksize=[1, 2, 2, 1],
+                strides=[1, 2, 2, 1],
+                padding='VALID')
 
-def max_pool_2x2(input_x):
-    """Max pooling 2x2"""
-    return tf.nn.max_pool(
-        input_x, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME')
+        with tf.variable_scope(self._uuid + "conv2"):
+            conv2 = tf.nn.relu(
+                utils.conv_layer(pool1, [5, 5, 32, 64], 1, 'SAME'))
 
+        with tf.variable_scope(self._uuid + "pool2"):
+            pool2 = tf.nn.max_pool(
+                conv2,
+                ksize=[1, 2, 2, 1],
+                strides=[1, 2, 2, 1],
+                padding='VALID')
 
-def infer(input_x, keep_prob):
-    """Returns the model"""
-    # First convolutional layer: convolution follower by max pooling.
-    # The conv layer will compute 32 features for each 5x5 patch. Its weight tensor will
-    # have a shape of [5,5,1,32].
-    # [5x5] = patch size
-    # 1 = the number of input channel
-    # 32 = the number of output channel
-    W_conv1 = weight_variable([5, 5, 1, 32])
-    b_conv1 = bias_variable([32])
+        with tf.variable_scope(self._uuid + "fc1"):
+            W_fc1 = utils.weight("W", [7 * 7 * 64, 1024])
+            b_fc1 = utils.bias("b", [1024])
 
-    # reshape x to a 4d tensors, with the second and third dim corresponding to image widht
-    # and height. The final dimension corresponding to the number of color channels
-    x_image = tf.reshape(input_x, [-1, 28, 28, 1])
+            pool2_flat = tf.reshape(pool2, [-1, 7 * 7 * 64])
+            fc1 = tf.nn.relu(
+                tf.nn.bias_add(tf.matmul(pool2_flat, W_fc1), b_fc1))
+            fc1 = tf.nn.dropout(fc1, keep_prob)
 
-    # convolve x_image with the weight tensor, add the bias, apply ReLU function and
-    # finally max pool
-    h_conv1 = tf.nn.relu(conv2d(x_image, W_conv1) + b_conv1)
-    h_pool1 = max_pool_2x2(h_conv1)
+        with tf.variable_scope(self._uuid + "softmax_linear"):
+            W_fc2 = utils.weight("W", [1024, 10])
+            b_fc2 = utils.bias("b", [10])
+            logits = tf.nn.bias_add(tf.matmul(fc1, W_fc2), b_fc2, name="out")
+            return logits
 
-    # second convolutional layer: 64 features for each 5x5 patch
-    W_conv2 = weight_variable([5, 5, 32, 64])
-    b_conv2 = bias_variable([64])
+    def loss(self, labels):
+        """ Return the loss function for the model returned by infer.
+        Args:
+            logits: Logits from infer()
+            labels: one-hot encoded labels
+        """
+        return tf.reduce_mean(
+            tf.nn.softmax_cross_entropy_with_logits(self.logits, labels))
 
-    h_conv2 = tf.nn.relu(conv2d(h_pool1, W_conv2) + b_conv2)
-    h_pool2 = max_pool_2x2(h_conv2)
-
-    # densely connected layer:
-    #    now that the image size has been reduced to 7x7, we add a FC layer with 1024 neurons
-    #    to allow processing on the entire image.
-    #    We reshape the tensor from the pooling layer into a batch of vectors,
-    #    multiply by a weight matrix, add a bias, and apply a ReLU
-    W_fc1 = weight_variable([7 * 7 * 64, 1024])
-    b_fc1 = bias_variable([1024])
-
-    h_pool2_flat = tf.reshape(h_pool2, [-1, 7 * 7 * 64])
-    h_fc1 = tf.nn.relu(tf.matmul(h_pool2_flat, W_fc1) + b_fc1)
-
-    # dropout:
-    #    to reduce overfitting we will apply dropout before the readout layer.
-    #    Create a placeholder for the probability that a neuron's output is kept during
-    #    dropout. This allow us to turn dropout on during training, and turn it off during
-    #    testing. tf.nn.dropout automatically handles scaling nerons outputs in additins
-    #    to making them. So dropout just works without any additianal scaling
-    h_fc1_drop = tf.nn.dropout(h_fc1, keep_prob)
-
-    # readout layer:
-    #    add a linear softmax layer (no non-linearity)
-    W_fc2 = weight_variable([1024, 10])
-    b_fc2 = bias_variable([10])
-    logits = tf.matmul(h_fc1_drop, W_fc2) + b_fc2
-    return logits
-
-
-def loss(logits, labels):
-    """ Return the loss function for the model returned by infer.
-    Args:
-        logits: Logits from infer()
-        labels: one-hot encoded labels
-    """
-
-    return tf.reduce_mean(-tf.reduce_sum(
-        labels * tf.log(tf.nn.softmax(logits)), reduction_indices=[1]))
+    def variables(self):
+        """Returns trainable model variables"""
+        return [
+            variable for variable in tf.trainable_variables()
+            if variable.name.startswith(self._uuid)
+        ]
