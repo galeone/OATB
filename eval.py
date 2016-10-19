@@ -140,13 +140,14 @@ def main(args):
 
             for obj in optimizers:
                 # Log intial loss value, before training
-                summary_line = sess.run(obj["loss_summary"],
-                                        feed_dict={
-                                            inputs_: batch[0],
-                                            labels_: batch[1],
-                                            keep_prob_: 1.0
-                                        })
+                _, summary_line = sess.run([obj["loss"], obj["loss_summary"]],
+                                           feed_dict={
+                                               inputs_: batch[0],
+                                               labels_: batch[1],
+                                               keep_prob_: 1.0
+                                           })
                 obj["summary"].add_summary(summary_line, global_step=0)
+                obj["summary"].flush()
 
             # loop for 2000 time, starting from 1 because of initial loss logging
             for i in range(1, 20001):
@@ -218,7 +219,7 @@ def main(args):
                         accuracy_name_: "test_accuracy",
                     })
                 obj["summary"].add_summary(summary_line)
-                obj["summary"].flush()
+                obj["summary"].close()
 
                 print(obj["name"], "test accuracy {}".format(test_accuracy))
 
